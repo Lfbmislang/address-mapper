@@ -1,202 +1,103 @@
-@st.cache_resource(experimental_allow_widgets=True)  # Fix for Folium + Streamlit
-def create_map():
-    return folium.Map(location=[14.6, 121.0], zoom_start=12)
-
 import streamlit as st
 import pandas as pd
-import io  # Add this import at the top
-import folium
-from streamlit_folium import folium_static
-import traceback  # Add to imports
+import geopandas as gpd
+import pydeck as pdk
+from typing import Optional
 
-try:
-    # Your entire app code here
-except Exception as e:
-    st.error(f"An error occurred: {str(e)}")
-    st.text(traceback.format_exc())  # Shows full error trace
-# ... (keep your existing imports and initial setup code)
-
-if uploaded_file is None:
-    st.warning("Please upload a CSV file first")
-    st.stop()  # Prevents further execution
-# Replace your current file uploader and CSV reading code with this:
-uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
-
-if uploaded_file is not None:
-    try:
-        # Read CSV with explicit UTF-8 encoding
-        df = pd.read_csv(uploaded_file, encoding='utf-8')
-        
-        # Check required columns
-        if not all(col in df.columns for col in ['Name', 'Address']):
-            st.error("❌ CSV must contain 'Name' and 'Address' columns")
-            st.stop()
-        
-        st.success("✅ File loaded successfully!")
-        
-    except UnicodeDecodeError:
-        st.error("""
-        **File encoding error!**  
-        Please save your CSV as **UTF-8** format:
-        1. Open in Excel → **Save As** → **CSV UTF-8 (Comma delimited)**
-        2. Re-upload the file.
-        """)
-
-# app.py
-import streamlit as st
-import pandas as pd
-import folium
-from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
-from sklearn.cluster import DBSCAN
-import numpy as np
-from streamlit_folium import st_folium
-
-# App title and description
-st.title("🌍 Address Mapping Tool")
-st.markdown("""
-Upload a CSV with addresses to automatically:
-- Geocode addresses to latitude/longitude
-- Cluster nearby locations
-- Visualize on an interactive map
-""")
-
-# File upload
-uploaded_file = st.file_uploader("Upload CSV file (columns: Name, Address)", type="csv")
-
-if uploaded_file is not None:
-    # Read CSV
-    df = pd.read_csv(uploaded_file)
+def main():
+    st.set_page_config(page_title="Address Mapper", layout="wide")
+    st.title("📍 Address Mapping Tool")
     
-    # Check required columns
-    if not all(col in df.columns for col in ['Name', 'Address']):
-        st.error("CSV must contain 'Name' and 'Address' columns")
-        st.stop()
-    
-    with st.spinner('Geocoding addresses... Please wait...'):
-        # Initialize geocoder
-        geolocator = Nominatim(user_agent="address_mapper")
-        geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+    # Sidebar for uploads and settings
+    with st.sidebar:
+        st.header("Data Input")
+        uploaded_file = st.file_uploader(
+            "Upload CSV with addresses", 
+            type=["csv"],
+            help="File should contain 'address' or 'latitude/longitude' columns"
+        )
         
-        def get_coordinates(address):
+        map_style = st.selectbox(
+            "Map Style",
+            ["road", "satellite", "terrain"],
+            index=0
+        )
+    
+    # Main content area
+    tab1, tab2 = st.tabs(["Map View", "Data View"])
+    
+    with tab1:
+        if uploaded_file is not None:
             try:
-                location = geocode(address + ", Philippines")
-                if location:
-                    return (location.latitude, location.longitude)
-                return (None, None)
-            except:
-                return (None, None)
-        
-        # Geocode addresses
-        df[['latitude', 'longitude']] = df['Address'].apply(
-            lambda x: pd.Series(get_coordinates(x))
+                # Process the uploaded file
+                df = pd.read_csv(uploaded_file)
+                
+                # Validate data
+                if not validate_data(df):
+                    st.warning("Data must contain either 'address' or both 'latitude' and 'longitude' columns")
+                    return
+                
+                # Geocode if needed
+                geo_df = process_data(df)
+                
+                # Display map
+                display_map(geo_df, map_style)
+                
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+                st.stop()
+        else:
+            st.info("Please upload a CSV file to get started")
+    
+    with tab2:
+        if uploaded_file is not None:
+            try:
+                st.dataframe(df, use_container_width=True)
+            except NameError:
+                pass
+
+def validate_data(df: pd.DataFrame) -> bool:
+    """Check if dataframe contains required location columns"""
+    has_coords = all(col in df.columns for col in ['latitude', 'longitude'])
+    has_address = 'address' in df.columns
+    return has_coords or has_address
+
+def process_data(df: pd.DataFrame) -> gpd.GeoDataFrame:
+    """Convert raw data to geodataframe"""
+    if 'latitude' in df.columns and 'longitude' in df.columns:
+        # Directly use coordinates
+        return gpd.GeoDataFrame(
+            df,
+            geometry=gpd.points_from_xy(df.longitude, df.latitude)
         )
-    
-    # Split into successful and failed geocoding
-    success_df = df.dropna(subset=['latitude', 'longitude'])
-    failed_df = df[df['latitude'].isna() | df['longitude'].isna()]
-    
-    # Show results summary
-    st.success(f"✅ Successfully geocoded {len(success_df)}/{len(df)} addresses")
-    
-    # Show successful geocoding in an expandable section
-    with st.expander("Show successfully geocoded addresses", expanded=True):
-        if not success_df.empty:
-            st.dataframe(success_df[['Name', 'Address', 'latitude', 'longitude']])
-        else:
-            st.warning("No addresses were successfully geocoded")
-    
-    # Show failed geocoding in an expandable section
-    with st.expander("Show addresses that failed geocoding", expanded=False):
-        if not failed_df.empty:
-            st.dataframe(failed_df[['Name', 'Address']])
-            
-            # Add manual coordinate input option
-            st.markdown("**Manually add coordinates for failed addresses:**")
-            selected_failed = st.selectbox(
-                "Select address to fix", 
-                failed_df['Address'],
-                key='failed_select'
-            )
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                lat = st.number_input("Latitude", key='lat_input')
-            with col2:
-                lon = st.number_input("Longitude", key='lon_input')
-            
-            if st.button("Add Coordinates"):
-                idx = failed_df[failed_df['Address'] == selected_failed].index[0]
-                df.at[idx, 'latitude'] = lat
-                df.at[idx, 'longitude'] = lon
-                st.experimental_rerun()
-        else:
-            st.info("All addresses were successfully geocoded")
-    
-    # Only proceed if we have some successful geocoding
-    if not success_df.empty:
-        # Clustering
-        coords = success_df[['latitude', 'longitude']].to_numpy()
-        
-        if len(coords) > 1:  # Need at least 2 points for clustering
-            # Convert to radians for haversine metric
-            coords_rad = np.radians(coords)
-            kms_per_radian = 6371.0088
-            epsilon = 2 / kms_per_radian  # 2km radius
-            
-            db = DBSCAN(eps=epsilon, min_samples=2, metric='haversine')
-            success_df['cluster'] = db.fit_predict(coords_rad)
-        else:
-            success_df['cluster'] = -1  # No clusters with single point
-        
-        # Create map
-        if not df.empty:
-    m = folium.Map(
-        location=[df["latitude"].mean(), df["longitude"].mean()],
-        zoom_start=12
+    else:
+        # Geocode addresses (simplified example)
+        st.warning("Geocoding functionality would go here")
+        raise NotImplementedError("Full geocoding not implemented in this example")
+
+def display_map(gdf: gpd.GeoDataFrame, map_style: str = "road"):
+    """Create interactive map visualization"""
+    layer = pdk.Layer(
+        "ScatterplotLayer",
+        data=gdf,
+        get_position=["longitude", "latitude"],
+        get_radius=100,
+        get_fill_color=[255, 0, 0, 160],
+        pickable=True,
+        auto_highlight=True
     )
+    
+    view_state = pdk.ViewState(
+        latitude=gdf["latitude"].mean(),
+        longitude=gdf["longitude"].mean(),
+        zoom=11
+    )
+    
+    st.pydeck_chart(pdk.Deck(
+        layers=[layer],
+        initial_view_state=view_state,
+        map_style=f"mapbox://styles/mapbox/{map_style}-v9"
+    ))
 
-        # After creating the map (m = folium.Map(...))
-st.write("Map center:", m.location)  # Debug: Check if map has valid coordinates
-
-if m:
-    folium_static(m)
-else:
-    st.error("❌ Map failed to load! Check coordinates.")
-        # Add markers
-       for _, row in df.iterrows():
-        folium.Marker(
-            [row["latitude"], row["longitude"]],
-            popup=f"{row['Name']}<br>{row['Address']}"
-        ).add_to(m)
-
-        
-        # Display map
-       st.header("Interactive Map")
-    folium_static(m, width=700, height=500)  # This renders the map
-else:
-    st.warning("No data to display on the map.")
-
-        # Download button for successful geocodes
-        st.download_button(
-            label="Download Geocoded Data",
-            data=success_df.to_csv(index=False),
-            file_name='geocoded_addresses.csv',
-            mime='text/csv'
-        )
-
-# Sidebar info
-st.sidebar.markdown("""
-### Instructions
-1. Prepare a CSV with columns:
-   - `Name` - Location name
-   - `Address` - Full address
-2. Upload the file
-3. Wait for geocoding to complete
-4. View the interactive map
-
-### Tips for better geocoding:
-- Include city and country in addresses
-- Avoid abbreviations when possible
-- For Philippine addresses, include "Philippines"
-""")
+if __name__ == "__main__":
+    main()
