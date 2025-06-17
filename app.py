@@ -1,3 +1,7 @@
+@st.cache_resource(experimental_allow_widgets=True)  # Fix for Folium + Streamlit
+def create_map():
+    return folium.Map(location=[14.6, 121.0], zoom_start=12)
+
 import streamlit as st
 import pandas as pd
 import io  # Add this import at the top
