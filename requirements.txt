@@ -1,9 +1,9 @@
-streamlit
-folium
-geopy
-scikit-learn
-pandas
 numpy
 streamlit-folium
 folium>=0.14.0
 streamlit-folium>=0.15.0
+streamlit==1.28.0
+folium==0.14.0
+geopy==2.3.0
+pandas==2.0.3
+streamlit-folium==0.15.1
