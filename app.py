@@ -5,6 +5,7 @@ def create_map():
 import streamlit as st
 import pandas as pd
 import io  # Add this import at the top
+import folium
 from streamlit_folium import folium_static
 
 # ... (keep your existing imports and initial setup code)
@@ -140,8 +141,12 @@ if uploaded_file is not None:
             success_df['cluster'] = -1  # No clusters with single point
         
         # Create map
-        map_center = [success_df['latitude'].mean(), success_df['longitude'].mean()]
-        m = folium.Map(location=map_center, zoom_start=12)
+        if not df.empty:
+    m = folium.Map(
+        location=[df["latitude"].mean(), df["longitude"].mean()],
+        zoom_start=12
+    )
+
         # After creating the map (m = folium.Map(...))
 st.write("Map center:", m.location)  # Debug: Check if map has valid coordinates
 
@@ -150,26 +155,19 @@ if m:
 else:
     st.error("❌ Map failed to load! Check coordinates.")
         # Add markers
-        for _, row in success_df.iterrows():
-            color = 'red' if row['cluster'] == -1 else 'blue'
-            
-            popup = folium.Popup(
-                f"<b>Name:</b> {row['Name']}<br>"
-                f"<b>Address:</b> {row['Address']}<br>"
-                f"<b>Coordinates:</b> {row['latitude']:.6f}, {row['longitude']:.6f}",
-                max_width=300
-            )
-            
-            folium.Marker(
-                [row['latitude'], row['longitude']],
-                popup=popup,
-                icon=folium.Icon(color=color, icon='info-sign')
-            ).add_to(m)
+       for _, row in df.iterrows():
+        folium.Marker(
+            [row["latitude"], row["longitude"]],
+            popup=f"{row['Name']}<br>{row['Address']}"
+        ).add_to(m)
+
         
         # Display map
-        st.subheader("Interactive Map")
-        folium_static(m, width=700, height=500)
-        
+       st.header("Interactive Map")
+    folium_static(m, width=700, height=500)  # This renders the map
+else:
+    st.warning("No data to display on the map.")
+
         # Download button for successful geocodes
         st.download_button(
             label="Download Geocoded Data",
