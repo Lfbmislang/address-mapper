@@ -1,3 +1,34 @@
+import streamlit as st
+import pandas as pd
+import io  # Add this import at the top
+
+# ... (keep your existing imports and initial setup code)
+
+# Replace your current file uploader and CSV reading code with this:
+uploaded_file = st.file_uploader("Upload CSV file (columns: Name, Address)", type="csv")
+
+if uploaded_file is not None:
+    try:
+        # Use StringIO to properly handle the file object
+        df = pd.read_csv(io.StringIO(uploaded_file.getvalue().decode('utf-8')))
+        
+        # Alternatively, you can try this version which works for both Excel and CSV:
+        # if uploaded_file.name.endswith('.csv'):
+        #     df = pd.read_csv(uploaded_file)
+        # else:
+        #     df = pd.read_excel(uploaded_file)
+        
+        # Rest of your processing code...
+        
+    except UnicodeDecodeError:
+        st.error("File encoding error. Please save your CSV as UTF-8 encoded.")
+    except pd.errors.EmptyDataError:
+        st.error("The file is empty.")
+    except pd.errors.ParserError:
+        st.error("Error parsing the file. Please check if it's a valid CSV.")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {str(e)}")
+
 # app.py
 import streamlit as st
 import pandas as pd
