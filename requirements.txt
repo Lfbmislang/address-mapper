@@ -5,4 +5,5 @@ scikit-learn
 pandas
 numpy
 streamlit-folium
+folium>=0.14.0
 streamlit-folium>=0.15.0
