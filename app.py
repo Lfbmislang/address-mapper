@@ -7,9 +7,18 @@ import pandas as pd
 import io  # Add this import at the top
 import folium
 from streamlit_folium import folium_static
+import traceback  # Add to imports
 
+try:
+    # Your entire app code here
+except Exception as e:
+    st.error(f"An error occurred: {str(e)}")
+    st.text(traceback.format_exc())  # Shows full error trace
 # ... (keep your existing imports and initial setup code)
 
+if uploaded_file is None:
+    st.warning("Please upload a CSV file first")
+    st.stop()  # Prevents further execution
 # Replace your current file uploader and CSV reading code with this:
 uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 
