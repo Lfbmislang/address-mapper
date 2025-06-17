@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io  # Add this import at the top
+from streamlit_folium import folium_static
 
 # ... (keep your existing imports and initial setup code)
 
@@ -137,7 +138,13 @@ if uploaded_file is not None:
         # Create map
         map_center = [success_df['latitude'].mean(), success_df['longitude'].mean()]
         m = folium.Map(location=map_center, zoom_start=12)
-        
+        # After creating the map (m = folium.Map(...))
+st.write("Map center:", m.location)  # Debug: Check if map has valid coordinates
+
+if m:
+    folium_static(m)
+else:
+    st.error("❌ Map failed to load! Check coordinates.")
         # Add markers
         for _, row in success_df.iterrows():
             color = 'red' if row['cluster'] == -1 else 'blue'
@@ -157,7 +164,7 @@ if uploaded_file is not None:
         
         # Display map
         st.subheader("Interactive Map")
-        st_folium(m, width=700, height=500)
+        folium_static(m, width=700, height=500)
         
         # Download button for successful geocodes
         st.download_button(
