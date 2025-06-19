@@ -26,7 +26,7 @@ def init_geocoder():
         try:
             if 'GOOGLE_API_KEY' in st.secrets:
                 st.warning("Falling back to Google Geocoding API")
-                return GoogleV3(api_key=st.secrets["GOOGLE_API_KEY"]).geocode
+                return RateLimiter(GoogleV3(api_key=st.secrets["GOOGLE_API_KEY"]).geocode, min_delay_seconds=1)
             else:
                 st.error("No Google API key found in secrets")
                 return None
@@ -36,41 +36,52 @@ def init_geocoder():
 
 def display_map(df):
     """Display interactive map with markers"""
-    layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=df,
-        get_position=["longitude", "latitude"],
-        get_radius=100,
-        get_fill_color=[255, 0, 0, 160],
-        pickable=True,
-        auto_highlight=True,
-    )
+    if df.empty or df['latitude'].isnull().all() or df['longitude'].isnull().all():
+        st.warning("No valid coordinates to display on map")
+        return
     
-    tooltip = {
-        "html": """
-        <div style="padding: 10px; background: white; color: black; border-radius: 5px;">
-            <b>{name}</b><br/>
-            <small>{address}</small><br/>
-            <small>Lat: {latitude:.4f}, Lng: {longitude:.4f}</small>
-        </div>
-        """,
-        "style": {
-            "backgroundColor": "white",
-            "color": "black"
+    # Calculate initial view state only with valid coordinates
+    valid_df = df[df['latitude'].notnull() & df['longitude'].notnull()]
+    
+    try:
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=valid_df,
+            get_position=["longitude", "latitude"],
+            get_radius=100,
+            get_fill_color=[255, 0, 0, 160],
+            pickable=True,
+            auto_highlight=True,
+        )
+        
+        tooltip = {
+            "html": """
+            <div style="padding: 10px; background: white; color: black; border-radius: 5px;">
+                <b>{name}</b><br/>
+                <small>{address}</small><br/>
+                <small>Lat: {latitude:.4f}, Lng: {longitude:.4f}</small>
+            </div>
+            """,
+            "style": {
+                "backgroundColor": "white",
+                "color": "black"
+            }
         }
-    }
-    
-    st.pydeck_chart(pdk.Deck(
-        map_style="mapbox://styles/mapbox/light-v9",
-        initial_view_state=pdk.ViewState(
-            latitude=df["latitude"].mean(),
-            longitude=df["longitude"].mean(),
-            zoom=11,
-            pitch=50,
-        ),
-        layers=[layer],
-        tooltip=tooltip
-    ))
+        
+        # Use Mapbox light style (no API key required)
+        st.pydeck_chart(pdk.Deck(
+            map_style="mapbox://styles/mapbox/light-v9",
+            initial_view_state=pdk.ViewState(
+                latitude=valid_df["latitude"].mean(),
+                longitude=valid_df["longitude"].mean(),
+                zoom=11,
+                pitch=50,
+            ),
+            layers=[layer],
+            tooltip=tooltip
+        ))
+    except Exception as e:
+        st.error(f"Failed to display map: {str(e)}")
 
 def process_addresses(df, geocode_func):
     """Process addresses with enhanced error handling"""
